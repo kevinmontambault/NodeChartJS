@@ -3,29 +3,20 @@
         <title>ChartJS</title>
     </head>
     <body>
-        <canvas id="chart"></canvas>
+        <canvas id="chart" height="1" width="1"></canvas>
     </body>
 </html>
-
-<script>
-    function resize(width, height){
-        const [x, y] = Window.this.box('position');
-        Window.this.move(x, y, height, width);
-    };
-
-    function setBackgroundColor(color){
-        document.getElementById('chart').style.backgroundColor = color;
-    };
-</script>
 
 <script type="module">
     import * as sctr from "@sciter";
     import * as sys from '@sys';
     import * as env from '@env';
 
-    sctr.import('/polyfill/ResizeObserver.js');
-    sctr.import('/polyfill/MutationObserver.js');
     sctr.import('/chartjs/chartjs-4.4.9.js');
+
+    // chartjs doesnt need the resize/mutation observer in this context, so no use for a polyfill
+    window.MutationObserver = class{observe(){}};
+    window.ResizeObserver = class{observe(){}};
 
     // parse command line options
     const args = Object.fromEntries(env.arguments().map(arg => {
@@ -39,41 +30,120 @@
         throw new Error('Missing IPC TCP port');
     }
 
+    // initialize chart object
+    const chartElement = document.getElementById('chart');
+    const config = {
+        options: {
+            responsive: false,
+            maintainAspectRatio: false,
+        }
+    };
+    const chart = new Chart(chartElement, config);
+
     // window state is ready, so set window options
     Window.this.on('statechange', () => {
         if(Window.this.state === 1){
-            resize(args.width||500, args.height||500);
-            setBackgroundColor(args.bg||'#FFFFFF');
+            const [screenWidth, screenHeight] = Window.this.screenBox('frame', 'dimension');
+            const windowHeight = args.height || 500;
+            const windowWidth  = args.width  || 500;
+
+            setTimeout(() =>{
+
+                // start window in the center of the screen
+                Window.this.move((screenWidth-windowWidth)/2, (screenHeight-windowHeight)/2, windowWidth, windowHeight);
+
+                // update chart drawing
+                chart.resize();
+    
+                // set chart background color
+                chartElement.style.backgroundColor = args.bg||'#FFFFFF';
+            },  100);
         }
     });
 
     // setup TCP connection
     const tcp = new sys.TCP();
     await tcp.connect({ip:'::1', port:parseInt(args.port)});
+    document.on("document-before-unload", () => tcp.close());
 
+    // server message loop
+    (async () => {
+        const lengthBytes = [null, null, null, null];
+        let   messageBuffer = null;
+        let   receivedData = 0;
+        while(true){
+            let dataBuffer;
+            try{ dataBuffer = new Uint8Array(await tcp.read()); }
+            catch(err){ console.error(err); break; }
+            if(dataBuffer === undefined){ break; }
+    
+            let dataOffset = 0;
+            while(dataOffset < dataBuffer.length){
+                if(messageBuffer === null){
+                    if(lengthBytes[0] === null){ lengthBytes[0] = dataBuffer[dataOffset++]; continue; }
+                    if(lengthBytes[1] === null){ lengthBytes[1] = dataBuffer[dataOffset++]; continue; }
+                    if(lengthBytes[2] === null){ lengthBytes[2] = dataBuffer[dataOffset++]; continue; }
+                    if(lengthBytes[3] === null){ lengthBytes[3] = dataBuffer[dataOffset++]; continue; }
+                    messageBuffer = new Uint8Array((lengthBytes[0]<<24) | (lengthBytes[1]<<16) | (lengthBytes[2]<<8) | lengthBytes[3]);
+                }
+    
+                else{
+                    messageBuffer[receivedData++] = dataBuffer[dataOffset++];
+    
+                    if(receivedData === messageBuffer.length){
+                        const messageType = messageBuffer[0];
+                        const dataString = String.fromCharCode.apply(null, messageBuffer.slice(1));
+                        lengthBytes.fill(null);
+                        messageBuffer = null;
+                        receivedData = 0;
+    
+                        // CONFIG
+                        if(messageType === 1){
+                            Object.assign(config, JSON.parse(dataString));
 
-    // while(true){
+                            config.options.responsive = false;
+                            config.options.maintainAspectRatio = false;
 
-    // }
+                            chart.update();
+                        }
 
-    const configBuffer = await tcp.read();
-    const configString = String.fromCharCode.apply(null, new Uint8Array(configBuffer))
-    const config = JSON.parse(configString);
+                        // RESIZE
+                        if(messageType === 2){
+                            const {width, height} = JSON.parse(dataString);
 
-    const chart = new Chart(document.getElementById('chart'), config);
+                            // keep window in position but change height and width
+                            const [x, y] = Window.this.box('position', 'border', 'monitor');
+                            Window.this.move(x, y, width, height);
 
-    // await tcp.write('data');
+                            // update chart drawing
+                            chart.resize();
+                        }
+
+                        // BGCOLOR
+                        if(messageType === 3){
+                            const {color} = JSON.parse(dataString);
+                            chartElement.style.backgroundColor = color;
+                        }
+                    }
+                }
+            }
+        }
+    })();
 </script>
 
 <style>
     body{
         padding: 0;
         margin: 0;
+        overflow: hidden;
+        position: relative;
+        width: 100vw;
+        height: 100vh;
     }
 
     #chart{
-        width: 100vw;
-        height: 100vh;
         position: absolute;
+        height: 100%;
+        width: 100%;
     }
 </style>

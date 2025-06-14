@@ -15,15 +15,32 @@ else{
 
 const scappPath = path.join(__dirname, 'bin', fileName);
 
+const messageTypes = {
+    CONFIG: 1,
+    RESIZE: 2,
+    BGCOLOR: 3,
+};
+
 module.exports = class Chart{
     constructor(config={}, options={}){
         this.config = config;
 
         this._client = null;
 
-        this._height = options.height || 500;
-        this._width = options.width || 500;
+        this._height  = options.height || 500;
+        this._width   = options.width || 500;
         this._bgColor = options.bgColor || '#FFFFFF';
+    };
+
+    _send(type, data){
+        if(!this._client){ throw new Error('Missing UI connection'); }
+
+        if(Object.isExtensible(data)){ data = JSON.stringify(data); }
+        if(typeof(data) === 'string'){ data = Buffer.from(data, 'utf8'); }
+
+        const dataLength = data.length + 1; // 1 for the type
+        const buffer = Buffer.from([(dataLength>>24)&0xFF, (dataLength>>16)&0xFF, (dataLength>>8)&0xFF, dataLength&0xFF, type, ...data]);
+        this._client.write(buffer);
     };
 
     async show(){
@@ -40,7 +57,7 @@ module.exports = class Chart{
                 
             });
 
-            client.write(JSON.stringify(this.config));
+            this.update();
         }).listen(0, () => {
             const scapp = spawn(scappPath, [
                 path.join(__dirname, `index.html`),
@@ -51,25 +68,28 @@ module.exports = class Chart{
                 `-bg=${this._color}`
             ]);
             scapp.on('close', () => server.close());
+            scapp.on('exit', () => server.close());
         });
     };
 
     async update(){
-        if(!this._client){ throw new Error('Missing UI connection'); }
+        this._send(messageTypes.CONFIG, this.config);
     };
 
     async resize(width, height){
         if(!Number.isInteger(width)){ throw new Error('Width must be integer'); }
         if(!Number.isInteger(height)){ throw new Error('Height must be integer'); }
-        if(!this._client){ throw new Error('Missing UI connection'); }
+
+        this._send(messageTypes.RESIZE, {width, height});
 
         this._width = width;
         this._height = height;
     };
 
     async setBackgroundColor(color){
-        if(!this._client){ throw new Error('Missing UI connection'); }
+        this._send(messageTypes.BGCOLOR, {color});
 
+        this._backgroundColor = color;
     };
 
     get height(){
