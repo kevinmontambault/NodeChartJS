@@ -20,17 +20,17 @@ const config = {
     }
 };
 
-// plot options
+// chart window options
 const options = {
     height: 500,
     width: 500,
     bgColor: '#FFFFFF'
 };
 
-// create the plot
+// create the chart
 const chart = new Chart(config, options);
 
-// open plot window
+// open chart window
 chart.show();
 
 // update the chart height and background color after 3 seconds
