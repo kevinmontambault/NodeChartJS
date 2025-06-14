@@ -1,0 +1,12 @@
+{
+  "name": "node-chartjs",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "node scripts/install-sciter.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "A Node package for rendering charts in stand-alone windows using ChartJS and Sciter"
+}

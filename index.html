@@ -1,0 +1,79 @@
+<html window-icon="/favicon.png" window-resizable="false" window-width="0" window-height="0">
+    <head>
+        <title>ChartJS</title>
+    </head>
+    <body>
+        <canvas id="chart"></canvas>
+    </body>
+</html>
+
+<script>
+    function resize(width, height){
+        const [x, y] = Window.this.box('position');
+        Window.this.move(x, y, height, width);
+    };
+
+    function setBackgroundColor(color){
+        document.getElementById('chart').style.backgroundColor = color;
+    };
+</script>
+
+<script type="module">
+    import * as sctr from "@sciter";
+    import * as sys from '@sys';
+    import * as env from '@env';
+
+    sctr.import('/polyfill/ResizeObserver.js');
+    sctr.import('/polyfill/MutationObserver.js');
+    sctr.import('/chartjs/chartjs-4.4.9.js');
+
+    // parse command line options
+    const args = Object.fromEntries(env.arguments().map(arg => {
+        if(arg.startsWith('--')){ return [arg.slice(2), true]; }
+        if(arg.startsWith('-')){ return arg.slice(1).split('='); }
+    }).filter(a => a));
+
+    // ensure port was parsed
+    if(!args.port){
+        document.body.innerHTML = 'Missing IPC TCP port';
+        throw new Error('Missing IPC TCP port');
+    }
+
+    // window state is ready, so set window options
+    Window.this.on('statechange', () => {
+        if(Window.this.state === 1){
+            resize(args.width||500, args.height||500);
+            setBackgroundColor(args.bg||'#FFFFFF');
+        }
+    });
+
+    // setup TCP connection
+    const tcp = new sys.TCP();
+    await tcp.connect({ip:'::1', port:parseInt(args.port)});
+
+
+    // while(true){
+
+    // }
+
+    const configBuffer = await tcp.read();
+    const configString = String.fromCharCode.apply(null, new Uint8Array(configBuffer))
+    const config = JSON.parse(configString);
+
+    const chart = new Chart(document.getElementById('chart'), config);
+
+    // await tcp.write('data');
+</script>
+
+<style>
+    body{
+        padding: 0;
+        margin: 0;
+    }
+
+    #chart{
+        width: 100vw;
+        height: 100vh;
+        position: absolute;
+    }
+</style>
