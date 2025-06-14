@@ -20,7 +20,7 @@
     import * as sys from '@sys';
     import * as env from '@env';
 
-    sctr.import('/chartjs/chartjs-4.4.9.js');
+    sctr.import('./chartjs/chartjs-4.4.9.js');
 
     // chartjs doesnt need the resize/mutation observer in this context, so no use for a polyfill
     window.MutationObserver = class{observe(){}};
@@ -126,7 +126,7 @@
     
                     if(receivedData === messageBuffer.length){
                         const messageType = messageBuffer[0];
-                        const dataString = String.fromCharCode.apply(null, messageBuffer.slice(1));
+                        const dataString = Array.from(messageBuffer.slice(1), c => String.fromCharCode(c)).join('');
                         lengthBytes.fill(null);
                         messageBuffer = null;
                         receivedData = 0;
@@ -138,6 +138,8 @@
                                 // ensure these options are still set
                                 config.options.responsive = false;
                                 config.options.maintainAspectRatio = false;
+
+                                console.log(config)
 
                                 // update chart config
                                 chart.update();
