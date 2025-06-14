@@ -50,3 +50,8 @@ setTimeout(() => {
     chart.config.data.datasets[0].data.push(6);
     chart.update();
 }, 5000);
+
+// close plot 10 seconds
+setTimeout(() => {
+    chart.hide();
+}, 10000);

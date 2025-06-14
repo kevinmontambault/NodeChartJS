@@ -29,6 +29,7 @@ module.exports = class Chart extends EventEmitter{
         this.config = config;
 
         this._client = null;
+        this._process = null;
 
         this._height  = options.height || 500;
         this._width   = options.width || 500;
@@ -94,7 +95,7 @@ module.exports = class Chart extends EventEmitter{
 
             this.update();
         }).listen(0, () => {
-            const scapp = spawn(scappPath, [
+            this._process = spawn(scappPath, [
                 path.join(__dirname, `index.html`),
                 '--debug',
                 `-port=${server.address().port}`,
@@ -102,8 +103,16 @@ module.exports = class Chart extends EventEmitter{
                 `-height=${this._height}`,
                 `-bg=${this._color}`
             ]);
-            scapp.on('close', () => server.close());
-            scapp.on('exit', () => server.close());
+
+            this._process.on('close', () => {
+                this._process = null;
+                server.close();
+            });
+            
+            this._process.on('exit', () => {
+                this._process = null;
+                server.close();
+            });
         });
 
         server.on('close', () => this.emit('close'));
@@ -111,6 +120,14 @@ module.exports = class Chart extends EventEmitter{
 
     async update(){
         this._send(messageTypes.CONFIG, this.config);
+    };
+
+    // delete the chart window if it is open
+    async hide(){
+        if(!this._process){ throw new Error('Missing Sciter process'); }
+
+        this._client?.destroy();
+        this._process.kill();
     };
 
     async resize(width, height){
