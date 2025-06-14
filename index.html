@@ -1,4 +1,4 @@
-<html window-icon="/favicon.png" window-resizable="false" window-width="0" window-height="0">
+<html window-icon="/favicon.png" window-width="0" window-height="0">
     <head>
         <title>ChartJS</title>
     </head>
@@ -6,6 +6,14 @@
         <canvas id="chart" height="1" width="1"></canvas>
     </body>
 </html>
+
+<script>
+    const messageTypes = {
+        CONFIG: 1,
+        RESIZE: 2,
+        BGCOLOR: 3,
+    };
+</script>
 
 <script type="module">
     import * as sctr from "@sciter";
@@ -66,6 +74,32 @@
     await tcp.connect({ip:'::1', port:parseInt(args.port)});
     document.on("document-before-unload", () => tcp.close());
 
+    // utility function for writing a message to the tcp socket
+    const send = (messageType, data) => {
+        if(!data){ data = ''; }
+        if(Object.isExtensible(data)){ data = JSON.stringify(data); }
+        if(typeof(data) === 'string'){ data = new Uint8Array([...data].map(c => c.charCodeAt(0))); }
+
+        const dataLength = data.length + 1; // 1 for the type
+        const buffer = new Uint8Array([(dataLength>>24)&0xFF, (dataLength>>16)&0xFF, (dataLength>>8)&0xFF, dataLength&0xFF, messageType, ...data]);
+        tcp.write(buffer);
+    };
+
+    // window resize handler
+    let queuedResize = null;
+    Window.this.on('size', () => {
+        if(queuedResize){ return; }
+        
+        queuedResize = window.requestAnimationFrame(() => {
+            chart.resize();
+            
+            const [width, height] = Window.this.box('dimension', 'border');
+            send(messageTypes.RESIZE, {width, height});
+
+            queuedResize = null;
+        });
+    });
+
     // server message loop
     (async () => {
         const lengthBytes = [null, null, null, null];
@@ -96,33 +130,37 @@
                         lengthBytes.fill(null);
                         messageBuffer = null;
                         receivedData = 0;
+
+                        switch(messageType){
+                            case messageTypes.CONFIG: {
+                                Object.assign(config, JSON.parse(dataString));
+
+                                // ensure these options are still set
+                                config.options.responsive = false;
+                                config.options.maintainAspectRatio = false;
+
+                                // update chart config
+                                chart.update();
+                                break;
+                            }
     
-                        // CONFIG
-                        if(messageType === 1){
-                            Object.assign(config, JSON.parse(dataString));
+                            case messageTypes.RESIZE: {
+                                const {width, height} = JSON.parse(dataString);
 
-                            config.options.responsive = false;
-                            config.options.maintainAspectRatio = false;
+                                // keep window in position but change height and width
+                                const [x, y] = Window.this.box('position', 'border', 'monitor');
+                                Window.this.move(x, y, width, height);
 
-                            chart.update();
-                        }
+                                // update chart drawing
+                                chart.resize();
+                                break;
+                            }
 
-                        // RESIZE
-                        if(messageType === 2){
-                            const {width, height} = JSON.parse(dataString);
-
-                            // keep window in position but change height and width
-                            const [x, y] = Window.this.box('position', 'border', 'monitor');
-                            Window.this.move(x, y, width, height);
-
-                            // update chart drawing
-                            chart.resize();
-                        }
-
-                        // BGCOLOR
-                        if(messageType === 3){
-                            const {color} = JSON.parse(dataString);
-                            chartElement.style.backgroundColor = color;
+                            case messageTypes.BGCOLOR: {
+                                const {color} = JSON.parse(dataString);
+                                chartElement.style.backgroundColor = color;
+                                break;
+                            }
                         }
                     }
                 }
@@ -132,10 +170,13 @@
 </script>
 
 <style>
+    html{
+        overflow: hidden;
+    }
+
     body{
         padding: 0;
         margin: 0;
-        overflow: hidden;
         position: relative;
         width: 100vw;
         height: 100vh;

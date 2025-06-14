@@ -33,6 +33,11 @@ const chart = new Chart(config, options);
 // open chart window
 chart.show();
 
+// listen for resize events
+chart.on('resize', () =>{
+    console.log(`Chart resized to ${chart.width}x${chart.height}`);
+});
+
 // update the chart height and background color after 3 seconds
 setTimeout(() => {
     chart.bgColor = '#FFFF00';

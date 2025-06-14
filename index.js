@@ -1,3 +1,4 @@
+const EventEmitter = require('events').EventEmitter;
 const spawn = require('child_process').spawn;
 const path = require('path');
 const net = require('net');
@@ -21,8 +22,10 @@ const messageTypes = {
     BGCOLOR: 3,
 };
 
-module.exports = class Chart{
+module.exports = class Chart extends EventEmitter{
     constructor(config={}, options={}){
+        super();
+
         this.config = config;
 
         this._client = null;
@@ -35,6 +38,7 @@ module.exports = class Chart{
     _send(type, data){
         if(!this._client){ throw new Error('Missing UI connection'); }
 
+        if(!data){ data = ''; }
         if(Object.isExtensible(data)){ data = JSON.stringify(data); }
         if(typeof(data) === 'string'){ data = Buffer.from(data, 'utf8'); }
 
@@ -46,15 +50,46 @@ module.exports = class Chart{
     async show(){
         const server = net.createServer(client => {
             this._client = client;
-
-            client.on('data', data => {
-                // console.log('Received:', data.toString());
-            });
-
             client.on('close', () => this._client = null);
+            client.on('error', err => this.emit('error', err));
 
-            client.on('error', () => {
-                
+            const lengthBytes = [null, null, null, null];
+            let   messageBuffer = null;
+            let   receivedData = 0;
+            client.on('data', dataBuffer => {
+
+                let dataOffset = 0;
+                while(dataOffset < dataBuffer.length){
+                    if(messageBuffer === null){
+                        if(lengthBytes[0] === null){ lengthBytes[0] = dataBuffer[dataOffset++]; continue; }
+                        if(lengthBytes[1] === null){ lengthBytes[1] = dataBuffer[dataOffset++]; continue; }
+                        if(lengthBytes[2] === null){ lengthBytes[2] = dataBuffer[dataOffset++]; continue; }
+                        if(lengthBytes[3] === null){ lengthBytes[3] = dataBuffer[dataOffset++]; continue; }
+                        messageBuffer = Buffer.allocUnsafe((lengthBytes[0]<<24) | (lengthBytes[1]<<16) | (lengthBytes[2]<<8) | lengthBytes[3]);
+                    }
+        
+                    else{
+                        messageBuffer[receivedData++] = dataBuffer[dataOffset++];
+        
+                        if(receivedData === messageBuffer.length){
+                            const messageType = messageBuffer[0];
+                            const dataString = String.fromCharCode.apply(null, messageBuffer.slice(1));
+                            lengthBytes.fill(null);
+                            messageBuffer = null;
+                            receivedData = 0;
+
+                            switch(messageType){
+                                case messageTypes.RESIZE: {
+                                    const {width, height} = JSON.parse(dataString);
+                                    this._width = width;
+                                    this._height = height;
+                                    this.emit('resize');
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
             });
 
             this.update();
@@ -70,6 +105,8 @@ module.exports = class Chart{
             scapp.on('close', () => server.close());
             scapp.on('exit', () => server.close());
         });
+
+        server.on('close', () => this.emit('close'));
     };
 
     async update(){
