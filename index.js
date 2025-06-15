@@ -50,7 +50,7 @@ module.exports = class Chart extends EventEmitter{
         });
     };
 
-    async show(){
+    show(){
         return new Promise(resolve => {
             const server = net.createServer(async client => {
                 this._client = client;
