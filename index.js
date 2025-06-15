@@ -37,89 +37,95 @@ module.exports = class Chart extends EventEmitter{
     };
 
     _send(type, data){
-        if(!this._client){ throw new Error('Missing UI connection'); }
+        return new Promise((resolve, reject) => {
+            if(!this._client){ return reject(new Error('Missing UI connection')); }
 
-        if(!data){ data = ''; }
-        if(Object.isExtensible(data)){ data = JSON.stringify(data); }
-        if(typeof(data) === 'string'){ data = Buffer.from(data, 'utf8'); }
+            if(!data){ data = ''; }
+            if(Object.isExtensible(data)){ data = JSON.stringify(data); }
+            if(typeof(data) === 'string'){ data = Buffer.from(data, 'utf8'); }
 
-        const dataLength = data.length + 1; // 1 for the type
-        const buffer = Buffer.from([(dataLength>>24)&0xFF, (dataLength>>16)&0xFF, (dataLength>>8)&0xFF, dataLength&0xFF, type, ...data]);
-        this._client.write(buffer);
+            const dataLength = data.length + 1; // 1 for the type
+            const buffer = Buffer.from([(dataLength>>24)&0xFF, (dataLength>>16)&0xFF, (dataLength>>8)&0xFF, dataLength&0xFF, type, ...data]);
+            this._client.write(buffer, resolve);
+        });
     };
 
     async show(){
-        const server = net.createServer(client => {
-            this._client = client;
-            client.on('close', () => this._client = null);
-            client.on('error', err => this.emit('error', err));
-
-            const lengthBytes = [null, null, null, null];
-            let   messageBuffer = null;
-            let   receivedData = 0;
-            client.on('data', dataBuffer => {
-
-                let dataOffset = 0;
-                while(dataOffset < dataBuffer.length){
-                    if(messageBuffer === null){
-                        if(lengthBytes[0] === null){ lengthBytes[0] = dataBuffer[dataOffset++]; continue; }
-                        if(lengthBytes[1] === null){ lengthBytes[1] = dataBuffer[dataOffset++]; continue; }
-                        if(lengthBytes[2] === null){ lengthBytes[2] = dataBuffer[dataOffset++]; continue; }
-                        if(lengthBytes[3] === null){ lengthBytes[3] = dataBuffer[dataOffset++]; continue; }
-                        messageBuffer = Buffer.allocUnsafe((lengthBytes[0]<<24) | (lengthBytes[1]<<16) | (lengthBytes[2]<<8) | lengthBytes[3]);
-                    }
-        
-                    else{
-                        messageBuffer[receivedData++] = dataBuffer[dataOffset++];
-        
-                        if(receivedData === messageBuffer.length){
-                            const messageType = messageBuffer[0];
-                            const dataString = String.fromCharCode.apply(null, messageBuffer.slice(1));
-                            lengthBytes.fill(null);
-                            messageBuffer = null;
-                            receivedData = 0;
-
-                            switch(messageType){
-                                case messageTypes.RESIZE: {
-                                    const {width, height} = JSON.parse(dataString);
-                                    this._width = width;
-                                    this._height = height;
-                                    this.emit('resize');
-                                    break;
+        return new Promise(resolve => {
+            const server = net.createServer(async client => {
+                this._client = client;
+                client.on('close', () => this._client = null);
+                client.on('error', err => this.emit('error', err));
+    
+                const lengthBytes = [null, null, null, null];
+                let   messageBuffer = null;
+                let   receivedData = 0;
+                client.on('data', dataBuffer => {
+    
+                    let dataOffset = 0;
+                    while(dataOffset < dataBuffer.length){
+                        if(messageBuffer === null){
+                            if(lengthBytes[0] === null){ lengthBytes[0] = dataBuffer[dataOffset++]; continue; }
+                            if(lengthBytes[1] === null){ lengthBytes[1] = dataBuffer[dataOffset++]; continue; }
+                            if(lengthBytes[2] === null){ lengthBytes[2] = dataBuffer[dataOffset++]; continue; }
+                            if(lengthBytes[3] === null){ lengthBytes[3] = dataBuffer[dataOffset++]; continue; }
+                            messageBuffer = Buffer.allocUnsafe((lengthBytes[0]<<24) | (lengthBytes[1]<<16) | (lengthBytes[2]<<8) | lengthBytes[3]);
+                        }
+            
+                        else{
+                            messageBuffer[receivedData++] = dataBuffer[dataOffset++];
+            
+                            if(receivedData === messageBuffer.length){
+                                const messageType = messageBuffer[0];
+                                const dataString = String.fromCharCode.apply(null, messageBuffer.slice(1));
+                                lengthBytes.fill(null);
+                                messageBuffer = null;
+                                receivedData = 0;
+    
+                                switch(messageType){
+                                    case messageTypes.RESIZE: {
+                                        const {width, height} = JSON.parse(dataString);
+                                        this._width = width;
+                                        this._height = height;
+                                        this.emit('resize');
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            });
+                });
+    
+                await this.update();
 
-            this.update();
-        }).listen(0, () => {
-            this._process = spawn(scappPath, [
-                path.join(__dirname, `index.html`),
-                '--debug',
-                `-port=${server.address().port}`,
-                `-width=${this._width}`,
-                `-height=${this._height}`,
-                `-bg=${this._color}`
-            ]);
-
-            this._process.on('close', () => {
-                this._process = null;
-                server.close();
+                resolve();
+            }).listen(0, () => {
+                this._process = spawn(scappPath, [
+                    path.join(__dirname, `index.html`),
+                    '--debug',
+                    `-port=${server.address().port}`,
+                    `-width=${this._width}`,
+                    `-height=${this._height}`,
+                    `-bg=${this._color}`
+                ]);
+    
+                this._process.on('close', () => {
+                    this._process = null;
+                    server.close();
+                });
+                
+                this._process.on('exit', () => {
+                    this._process = null;
+                    server.close();
+                });
             });
-            
-            this._process.on('exit', () => {
-                this._process = null;
-                server.close();
-            });
+    
+            server.on('close', () => this.emit('close'));
         });
-
-        server.on('close', () => this.emit('close'));
     };
 
-    async update(){
-        this._send(messageTypes.CONFIG, this.config);
+    update(){
+        return this._send(messageTypes.CONFIG, this.config);
     };
 
     // delete the chart window if it is open
