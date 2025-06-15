@@ -18,8 +18,9 @@ const scappPath = path.join(__dirname, 'bin', fileName);
 
 const messageTypes = {
     CONFIG: 1,
-    RESIZE: 2,
-    BGCOLOR: 3,
+    CONFIG_JS: 2,
+    RESIZE: 3,
+    BGCOLOR: 4,
 };
 
 module.exports = class Chart extends EventEmitter{
@@ -126,7 +127,35 @@ module.exports = class Chart extends EventEmitter{
 
     // flushes current config to the client
     async update(){
-        await this._send(messageTypes.CONFIG, this.config);
+        let containsCallbacks = false;
+        const configString = (function stringify(obj){
+            if(typeof(obj) === 'string'){ return `"${obj}"`; }
+            if(typeof(obj) === 'number'){ return obj; }
+            if(obj === undefined){ return undefined; }
+            if(obj === null){ return 'null'; }
+            
+            if(obj instanceof Function){
+                const functionString = obj.toString();
+                if(functionString.endsWith(' { [native code] }')){ return console.warn('Config contains native callback function'); }
+                containsCallbacks = true;
+                return functionString.replace(/\r\n\s*/g, '');
+            }
+
+            if(Array.isArray(obj)){ return `[${obj.map(value => stringify(value)).filter(v =>v!==undefined).join(',')}]`; }
+
+            if(Object.isExtensible(obj)){
+                return `{${Object.entries(obj).map(([k, v])=> {
+                    const value = stringify(v);
+                    if(value === undefined){ return null; }
+                    return `"${k}":${value}`;
+                }).filter(k => k).join(',')}}`;
+            }
+
+            return obj.toString();
+        })(this.config);
+
+        if(containsCallbacks){ await this._send(messageTypes.CONFIG_JS, configString); }
+        else{ await this._send(messageTypes.CONFIG, configString); }
     };
 
     // delete the chart window if it is open
