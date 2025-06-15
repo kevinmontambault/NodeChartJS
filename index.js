@@ -124,8 +124,9 @@ module.exports = class Chart extends EventEmitter{
         });
     };
 
-    update(){
-        return this._send(messageTypes.CONFIG, this.config);
+    // flushes current config to the client
+    async update(){
+        await this._send(messageTypes.CONFIG, this.config);
     };
 
     // delete the chart window if it is open
@@ -140,14 +141,14 @@ module.exports = class Chart extends EventEmitter{
         if(!Number.isInteger(width)){ throw new Error('Width must be integer'); }
         if(!Number.isInteger(height)){ throw new Error('Height must be integer'); }
 
-        this._send(messageTypes.RESIZE, {width, height});
+        await this._send(messageTypes.RESIZE, {width, height});
 
         this._width = width;
         this._height = height;
     };
 
     async setBackgroundColor(color){
-        this._send(messageTypes.BGCOLOR, {color});
+        await this._send(messageTypes.BGCOLOR, {color});
 
         this._backgroundColor = color;
     };
