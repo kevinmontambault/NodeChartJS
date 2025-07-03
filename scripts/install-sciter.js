@@ -24,7 +24,7 @@ const binFolderPath = path.join(__dirname, '../bin');
 fs.mkdir(binFolderPath, {recursive:true}, err => {
   if(err){ throw err; }
 
-  const binFilePath = path.join(binFolderPath, 'scapp');
+  const binFilePath = path.join(binFolderPath, fileName);
   const file = fs.createWriteStream(binFilePath);
   const url = `https://gitlab.com/sciter-engine/sciter-js-sdk/-/raw/main/bin${platformPath}/${fileName}`;
 
