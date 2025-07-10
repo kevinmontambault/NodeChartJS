@@ -51,8 +51,8 @@ module.exports = class Chart extends EventEmitter{
         });
     };
 
-    show(){
-        return new Promise(resolve => {
+    async show(wait=false){
+        await new Promise(resolve => {
             const server = net.createServer(async client => {
                 this._client = client;
                 client.on('close', () => this._client = null);
@@ -123,6 +123,8 @@ module.exports = class Chart extends EventEmitter{
     
             server.on('close', () => this.emit('close'));
         });
+
+        if(wait){ await this.wait(); }
     };
 
     // waits for the client connection to be closed

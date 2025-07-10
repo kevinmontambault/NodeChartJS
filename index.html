@@ -56,17 +56,12 @@
             const windowHeight = args.height || 500;
             const windowWidth  = args.width  || 500;
 
-            setTimeout(() =>{
+            // start window in the center of the screen
+            Window.this.move((screenWidth-windowWidth)/2, (screenHeight-windowHeight)/2, windowWidth, windowHeight);
 
-                // start window in the center of the screen
-                Window.this.move((screenWidth-windowWidth)/2, (screenHeight-windowHeight)/2, windowWidth, windowHeight);
-
-                // update chart drawing
-                chart.resize();
-    
-                // set chart background color
-                chartElement.style.backgroundColor = args.bg||'#FFFFFF';
-            },  100);
+            // update chart
+            chart.resize();
+            chartElement.style.backgroundColor = args.bg||'#FFFFFF';
         }
     });
 
