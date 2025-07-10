@@ -125,6 +125,12 @@ module.exports = class Chart extends EventEmitter{
         });
     };
 
+    // waits for the client connection to be closed
+    wait(){
+        if(!this._client){ return; }
+        return new Promise(resolve => this.once('close', resolve));
+    };
+
     // flushes current config to the client
     async update(){
         let containsCallbacks = false;

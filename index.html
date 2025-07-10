@@ -101,10 +101,6 @@
         });
     });
 
-    (() => {
-        eval('({"data":{"datasets":{"0":{"data":{"0":{"x":1737272047,"y":0.53},"1":{"x":1737272047,"y":0.54},"2":{"x":1737272381,"y":0.99},"3":{"x":1737273719,"y":1},"4":{"x":1737274726,"y":0.91},"5":{"x":1737275350,"y":0.57},"6":{"x":1737276815,"y":0.91},"7":{"x":1737276815,"y":0.92},"8":{"x":1737276815,"y":0.94},"9":{"x":1737277369,"y":0.69}},"borderWidth":1,"pointRadius":1,"showLine":true,"fill":false,"borderColor":"#FF000022","type":"scatter","label":"Kilowatt Case Sales"}}},"options":{"animation":false,"hover":{"animationDuration":0},"plugins":{"tooltip":{"callbacks":{"label":context => {return `$${context.raw.y.toFixed(2)}`;},"title":elements => {const avgTime = elements.reduce((sum, e) => sum+e.raw.x, 0);return `${Time.toDateString(avgTime)}\n${Time.toTimeString(avgTime)}`}}}},"scales":{"x":{"title":{"display":true,"text":"Time"},"ticks":{"maxRotation":23,"minRotation":23},"grid":{"color":"#444"},"min":1737272047,"max":Infinity},"y":{"ticks":{"color":"#777"},"grid":{"color":"#444"}}}}})');
-    })();
-
     // server message loop
     (async () => {
         const lengthBytes = [null, null, null, null];
@@ -138,7 +134,8 @@
 
                         switch(messageType){
                             case messageTypes.CONFIG: {
-                                Object.assign(config, JSON.parse(dataString));
+                                try{ Object.assign(config, JSON.parse(dataString)); }
+                                catch(err){ document.body.innerText = `Failed to parse data string: ${err.message}`; break; }
 
                                 // ensure these options are still set
                                 config.options.responsive = false;
@@ -150,7 +147,8 @@
                             }
 
                             case messageTypes.CONFIG_JS: {
-                                Object.assign(config, eval(`"use strict";(${dataString});`));
+                                try{ Object.assign(config, eval(`"use strict";(${dataString});`)); }
+                                catch(err){ document.body.innerText = `Failed to evaluate data string: ${err.message}`; break; }
 
                                 // ensure these options are still set
                                 config.options.responsive = false;
